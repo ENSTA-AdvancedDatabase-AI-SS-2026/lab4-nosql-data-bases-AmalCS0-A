@@ -1,0 +1,1383 @@
+/**
+ * TP2 - Exercice 1 : Modélisation MongoDB
+ * Use Case : HealthCare DZ - Dossiers Médicaux
+ */
+
+use("medical_db");
+
+// ─── 1.1 : Créer la collection avec validation ────────────────────────────────
+db.createCollection("patients", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["cin", "nom", "prenom", "dateNaissance", "sexe"],
+      properties: {
+        cin: {
+          bsonType: "string",
+          pattern: "^[0-9]{12,14}$",
+          description: "CIN obligatoire - 12 à 14 chiffres"
+        },
+        nom: {
+          bsonType: "string",
+          minLength: 2,
+          description: "Nom de famille obligatoire"
+        },
+        prenom: {
+          bsonType: "string",
+          minLength: 2,
+          description: "Prénom obligatoire"
+        },
+        dateNaissance: {
+          bsonType: "date",
+          description: "Date de naissance obligatoire"
+        },
+        sexe: {
+          bsonType: "string",
+          enum: ["M", "F"],
+          description: "Sexe : M ou F uniquement"
+        },
+        groupeSanguin: {
+          bsonType: "string",
+          enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+          description: "Groupe sanguin ABO/Rhésus"
+        },
+        adresse: {
+          bsonType: "object",
+          properties: {
+            wilaya:  { bsonType: "string" },
+            commune: { bsonType: "string" }
+          }
+        },
+        antecedents: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+        allergies: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+        consultations: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            required: ["date", "medecin", "diagnostic"],
+            properties: {
+              date:       { bsonType: "date" },
+              medecin:    { bsonType: "object" },
+              diagnostic: { bsonType: "string" },
+              medicaments: {
+                bsonType: "array",
+                items: { bsonType: "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  validationLevel:  "moderate",   // n'empêche pas les mises à jour d'anciens docs
+  validationAction: "error"        // rejette les inserts invalides
+});
+
+// ─── 1.2 : Insérer des patients avec données algériennes ──────────────────────
+const patients = [
+  // ── Patient 1 ──────────────────────────────────────────────────────────────
+  {
+    cin: "198001012300",
+    nom: "Bensalem", prenom: "Ahmed",
+    dateNaissance: new Date("1980-01-01"), sexe: "M",
+    adresse: { wilaya: "Alger", commune: "Bab Ezzouar" },
+    groupeSanguin: "O+",
+    antecedents: ["Diabète type 2", "HTA"],
+    allergies: ["Pénicilline"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-01-15"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "Hypertension artérielle",
+        tension: { systolique: 145, diastolique: 92 },
+        medicaments: [
+          { nom: "Amlodipine", dosage: "5mg", duree: "30 jours" },
+          { nom: "Losartan",   dosage: "50mg", duree: "30 jours" }
+        ],
+        notes: "Surveillance tensionnelle recommandée"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-04-10"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "Hypertension artérielle - contrôle",
+        tension: { systolique: 135, diastolique: 85 },
+        medicaments: [
+          { nom: "Amlodipine", dosage: "5mg", duree: "60 jours" }
+        ],
+        notes: "Amélioration notable, continuer traitement"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-09-20"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Diabète type 2 - déséquilibré",
+        glycemie: 2.1,
+        medicaments: [
+          { nom: "Metformine", dosage: "1000mg", duree: "90 jours" }
+        ],
+        notes: "HbA1c à refaire dans 3 mois"
+      }
+    ]
+  },
+
+  // ── Patient 2 ──────────────────────────────────────────────────────────────
+  {
+    cin: "199505153012",
+    nom: "Khelifi", prenom: "Fatima",
+    dateNaissance: new Date("1995-05-15"), sexe: "F",
+    adresse: { wilaya: "Oran", commune: "Bir El Djir" },
+    groupeSanguin: "A+",
+    antecedents: ["Asthme"],
+    allergies: ["Aspirine", "AINS"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-11-03"),
+        medecin: { nom: "Dr. Zerrouki", specialite: "Pneumologie" },
+        diagnostic: "Asthme bronchique - crise modérée",
+        medicaments: [
+          { nom: "Ventoline",    dosage: "100mcg", duree: "15 jours" },
+          { nom: "Béclométasone",dosage: "250mcg", duree: "30 jours" }
+        ],
+        notes: "Éviter les déclencheurs allergènes"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-02-18"),
+        medecin: { nom: "Dr. Zerrouki", specialite: "Pneumologie" },
+        diagnostic: "Asthme bronchique - suivi",
+        medicaments: [
+          { nom: "Béclométasone", dosage: "250mcg", duree: "60 jours" }
+        ],
+        notes: "Bon contrôle de l'asthme, débitmètre de pointe normal"
+      }
+    ]
+  },
+
+  // ── Patient 3 ──────────────────────────────────────────────────────────────
+  {
+    cin: "197212254501",
+    nom: "Meziane", prenom: "Abdelkader",
+    dateNaissance: new Date("1972-12-25"), sexe: "M",
+    adresse: { wilaya: "Constantine", commune: "El Khroub" },
+    groupeSanguin: "B+",
+    antecedents: ["Diabète type 2", "HTA", "Insuffisance rénale chronique stade 2"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-10-05"),
+        medecin: { nom: "Dr. Touati", specialite: "Nephrologie" },
+        diagnostic: "Insuffisance rénale chronique - surveillance",
+        medicaments: [
+          { nom: "Furosémide", dosage: "40mg", duree: "30 jours" }
+        ],
+        notes: "Créatinine à surveiller chaque mois"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-01-22"),
+        medecin: { nom: "Dr. Touati", specialite: "Nephrologie" },
+        diagnostic: "IRC stade 2 - stable",
+        medicaments: [
+          { nom: "Furosémide",  dosage: "40mg",  duree: "30 jours" },
+          { nom: "Bicarbonate", dosage: "500mg", duree: "30 jours" }
+        ],
+        notes: "DFG stable à 62 ml/min"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-06-14"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Diabète type 2 - contrôle trimestriel",
+        glycemie: 1.85,
+        medicaments: [
+          { nom: "Metformine", dosage: "500mg", duree: "90 jours" }
+        ],
+        notes: "Adapter la dose vu l'IRC"
+      }
+    ]
+  },
+
+  // ── Patient 4 ──────────────────────────────────────────────────────────────
+  {
+    cin: "200103087890",
+    nom: "Saidi", prenom: "Lynda",
+    dateNaissance: new Date("2001-03-08"), sexe: "F",
+    adresse: { wilaya: "Annaba", commune: "Sidi Amar" },
+    groupeSanguin: "O-",
+    antecedents: ["Anémie ferriprive"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-03-01"),
+        medecin: { nom: "Dr. Hadjadj", specialite: "Médecine générale" },
+        diagnostic: "Anémie ferriprive",
+        medicaments: [
+          { nom: "Ferrograd", dosage: "325mg", duree: "60 jours" }
+        ],
+        notes: "NFS de contrôle dans 2 mois"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-05-10"),
+        medecin: { nom: "Dr. Hadjadj", specialite: "Médecine générale" },
+        diagnostic: "Anémie - amélioration",
+        medicaments: [
+          { nom: "Ferrograd", dosage: "325mg", duree: "30 jours" }
+        ],
+        notes: "Hémoglobine remontée à 11.5 g/dL"
+      }
+    ]
+  },
+
+  // ── Patient 5 ──────────────────────────────────────────────────────────────
+  {
+    cin: "196807196712",
+    nom: "Belhadj", prenom: "Mokhtar",
+    dateNaissance: new Date("1968-07-19"), sexe: "M",
+    adresse: { wilaya: "Blida", commune: "Boufarik" },
+    groupeSanguin: "AB+",
+    antecedents: ["HTA", "Dyslipidémie", "Tabagisme"],
+    allergies: ["Sulfamides"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-09-12"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "Dyslipidémie - bilan lipidique élevé",
+        medicaments: [
+          { nom: "Atorvastatine", dosage: "40mg", duree: "90 jours" }
+        ],
+        notes: "LDL à 2.1 g/L - régime pauvre en graisses saturées"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-01-08"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "HTA + Dyslipidémie - suivi",
+        tension: { systolique: 150, diastolique: 95 },
+        medicaments: [
+          { nom: "Atorvastatine", dosage: "40mg",  duree: "90 jours" },
+          { nom: "Ramipril",      dosage: "10mg", duree: "90 jours" }
+        ],
+        notes: "Conseiller arrêt tabac - orienter vers tabacologie"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-07-30"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "HTA - contrôle semestriel",
+        tension: { systolique: 138, diastolique: 88 },
+        medicaments: [
+          { nom: "Ramipril", dosage: "10mg", duree: "90 jours" }
+        ],
+        notes: "Arrêt tabac en cours depuis 2 mois, encourager"
+      }
+    ]
+  },
+
+  // ── Patient 6 ──────────────────────────────────────────────────────────────
+  {
+    cin: "199209246501",
+    nom: "Rahmani", prenom: "Soumia",
+    dateNaissance: new Date("1992-09-24"), sexe: "F",
+    adresse: { wilaya: "Sétif", commune: "Ain Oulmène" },
+    groupeSanguin: "A-",
+    antecedents: ["Migraine", "Anxiété"],
+    allergies: ["Codéine"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-02-07"),
+        medecin: { nom: "Dr. Aouadi", specialite: "Neurologie" },
+        diagnostic: "Migraine chronique",
+        medicaments: [
+          { nom: "Sumatriptan",  dosage: "50mg",  duree: "À la demande" },
+          { nom: "Propranolol",  dosage: "40mg",  duree: "60 jours" }
+        ],
+        notes: "Tenir un agenda des crises"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-05-22"),
+        medecin: { nom: "Dr. Aouadi", specialite: "Neurologie" },
+        diagnostic: "Migraine - fréquence réduite",
+        medicaments: [
+          { nom: "Propranolol", dosage: "40mg", duree: "90 jours" }
+        ],
+        notes: "Crises passées de 8 à 3 par mois"
+      }
+    ]
+  },
+
+  // ── Patient 7 ──────────────────────────────────────────────────────────────
+  {
+    cin: "198512103214",
+    nom: "Amrani", prenom: "Karim",
+    dateNaissance: new Date("1985-12-10"), sexe: "M",
+    adresse: { wilaya: "Tlemcen", commune: "Remchi" },
+    groupeSanguin: "B-",
+    antecedents: ["Ulcère gastroduodénal", "Reflux gastro-oesophagien"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-12-15"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "Ulcère gastrique - poussée",
+        medicaments: [
+          { nom: "Oméprazole",  dosage: "20mg", duree: "28 jours" },
+          { nom: "Amoxicilline",dosage: "1g",   duree: "7 jours"  },
+          { nom: "Clarithromycine", dosage: "500mg", duree: "7 jours" }
+        ],
+        notes: "Trithérapie anti-H. pylori. Contrôle fibroscopie à 6 sem."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-04-03"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "RGO - contrôle",
+        medicaments: [
+          { nom: "Oméprazole", dosage: "20mg", duree: "60 jours" }
+        ],
+        notes: "Fibroscopie : cicatrisation complète"
+      }
+    ]
+  },
+
+  // ── Patient 8 ──────────────────────────────────────────────────────────────
+  {
+    cin: "197804227823",
+    nom: "Djebbar", prenom: "Nadia",
+    dateNaissance: new Date("1978-04-22"), sexe: "F",
+    adresse: { wilaya: "Béjaïa", commune: "Akbou" },
+    groupeSanguin: "O+",
+    antecedents: ["Diabète type 2", "Hypothyroïdie"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-01-10"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Hypothyroïdie - TSH élevée",
+        medicaments: [
+          { nom: "Lévothyroxine", dosage: "75mcg", duree: "90 jours" }
+        ],
+        notes: "TSH à 8.2 mUI/L. Contrôle à 3 mois."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-04-15"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Hypothyroïdie + Diabète - suivi",
+        glycemie: 1.65,
+        medicaments: [
+          { nom: "Lévothyroxine", dosage: "100mcg", duree: "90 jours" },
+          { nom: "Metformine",    dosage: "850mg",  duree: "90 jours" }
+        ],
+        notes: "TSH normalisée à 2.1. Glycémie encore limite."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-09-05"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Bilan annuel - équilibre satisfaisant",
+        glycemie: 1.45,
+        medicaments: [
+          { nom: "Lévothyroxine", dosage: "100mcg", duree: "90 jours" },
+          { nom: "Metformine",    dosage: "850mg",  duree: "90 jours" }
+        ],
+        notes: "Bon équilibre thyroïdien et glycémique"
+      }
+    ]
+  },
+
+  // ── Patient 9 ──────────────────────────────────────────────────────────────
+  {
+    cin: "199811302101",
+    nom: "Haddad", prenom: "Rania",
+    dateNaissance: new Date("1998-11-30"), sexe: "F",
+    adresse: { wilaya: "Alger", commune: "Kouba" },
+    groupeSanguin: "AB-",
+    antecedents: ["Lupus érythémateux systémique"],
+    allergies: ["Ibuprofène"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-10-18"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "Lupus - poussée articulaire",
+        medicaments: [
+          { nom: "Hydroxychloroquine", dosage: "200mg", duree: "Traitement de fond" },
+          { nom: "Prednisolone",       dosage: "30mg",  duree: "15 jours" }
+        ],
+        notes: "Bilan immunologique complet requis"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-02-25"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "Lupus - rémission partielle",
+        medicaments: [
+          { nom: "Hydroxychloroquine", dosage: "200mg", duree: "Traitement de fond" }
+        ],
+        notes: "Anti-dsDNA en baisse, continuer fond"
+      }
+    ]
+  },
+
+  // ── Patient 10 ─────────────────────────────────────────────────────────────
+  {
+    cin: "196301156023",
+    nom: "Bouzid", prenom: "Mostefa",
+    dateNaissance: new Date("1963-01-15"), sexe: "M",
+    adresse: { wilaya: "Mascara", commune: "Tizi" },
+    groupeSanguin: "A+",
+    antecedents: ["HTA", "Diabète type 2", "Cardiopathie ischémique"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-11-20"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "Cardiopathie ischémique - stable",
+        tension: { systolique: 130, diastolique: 80 },
+        medicaments: [
+          { nom: "Aspirine",       dosage: "100mg", duree: "Traitement de fond" },
+          { nom: "Bisoprolol",     dosage: "5mg",   duree: "90 jours" },
+          { nom: "Atorvastatine",  dosage: "80mg",  duree: "90 jours" }
+        ],
+        notes: "ECG stable - pas de nouvelles lésions"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-03-14"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "HTA + cardiopathie - suivi",
+        tension: { systolique: 128, diastolique: 78 },
+        medicaments: [
+          { nom: "Aspirine",      dosage: "100mg", duree: "Traitement de fond" },
+          { nom: "Bisoprolol",    dosage: "5mg",   duree: "90 jours" },
+          { nom: "Atorvastatine", dosage: "80mg",  duree: "90 jours" }
+        ],
+        notes: "Bonne observance thérapeutique"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-08-22"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Diabète type 2 - bilan",
+        glycemie: 1.72,
+        medicaments: [
+          { nom: "Insuline Glargine", dosage: "20UI", duree: "90 jours" }
+        ],
+        notes: "Passage à l'insuline basale vu déséquilibre"
+      }
+    ]
+  },
+
+  // ── Patient 11 ─────────────────────────────────────────────────────────────
+  {
+    cin: "199007095511",
+    nom: "Benmokhtar", prenom: "Yasmine",
+    dateNaissance: new Date("1990-07-09"), sexe: "F",
+    adresse: { wilaya: "Alger", commune: "Hydra" },
+    groupeSanguin: "B+",
+    antecedents: ["Epilepsie"],
+    allergies: ["Carbamazépine"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-01-30"),
+        medecin: { nom: "Dr. Aouadi", specialite: "Neurologie" },
+        diagnostic: "Epilepsie focale - suivi",
+        medicaments: [
+          { nom: "Lévétiracétam", dosage: "1000mg", duree: "90 jours" }
+        ],
+        notes: "Dernière crise il y a 8 mois. EEG stable."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-07-15"),
+        medecin: { nom: "Dr. Aouadi", specialite: "Neurologie" },
+        diagnostic: "Épilepsie - bilan annuel",
+        medicaments: [
+          { nom: "Lévétiracétam", dosage: "1000mg", duree: "90 jours" }
+        ],
+        notes: "Sans crise depuis 14 mois. Envisager réduction progressive."
+      }
+    ]
+  },
+
+  // ── Patient 12 ─────────────────────────────────────────────────────────────
+  {
+    cin: "197506184312",
+    nom: "Chaouch", prenom: "Rachid",
+    dateNaissance: new Date("1975-06-18"), sexe: "M",
+    adresse: { wilaya: "Oran", commune: "Es Senia" },
+    groupeSanguin: "O+",
+    antecedents: ["Goutte", "Lithiase rénale"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-02-12"),
+        medecin: { nom: "Dr. Touati", specialite: "Nephrologie" },
+        diagnostic: "Lithiase rénale - colique néphrétique",
+        medicaments: [
+          { nom: "Diclofénac",  dosage: "75mg",  duree: "5 jours" },
+          { nom: "Phloroglucinol", dosage: "80mg", duree: "5 jours" }
+        ],
+        notes: "Echo : calcul 6mm uretère droit. Hydratation +++."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-05-08"),
+        medecin: { nom: "Dr. Touati", specialite: "Nephrologie" },
+        diagnostic: "Goutte - hyperuricémie",
+        medicaments: [
+          { nom: "Allopurinol", dosage: "300mg", duree: "90 jours" }
+        ],
+        notes: "Uricémie à 560 µmol/L. Régime pauvre en purines."
+      }
+    ]
+  },
+
+  // ── Patient 13 ─────────────────────────────────────────────────────────────
+  {
+    cin: "200208147634",
+    nom: "Djamal", prenom: "Ines",
+    dateNaissance: new Date("2002-08-14"), sexe: "F",
+    adresse: { wilaya: "Blida", commune: "Larbaa" },
+    groupeSanguin: "A+",
+    antecedents: ["Asthme", "Rhinite allergique"],
+    allergies: ["Pollen", "Acariens"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-03-20"),
+        medecin: { nom: "Dr. Zerrouki", specialite: "Pneumologie" },
+        diagnostic: "Asthme allergique - exacerbation printanière",
+        medicaments: [
+          { nom: "Ventoline",     dosage: "100mcg", duree: "À la demande" },
+          { nom: "Fluticasone",   dosage: "125mcg", duree: "60 jours"    },
+          { nom: "Cetirizine",    dosage: "10mg",   duree: "30 jours"    }
+        ],
+        notes: "Saison pollens - éviter sorties en matinée"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-06-02"),
+        medecin: { nom: "Dr. Zerrouki", specialite: "Pneumologie" },
+        diagnostic: "Asthme - contrôle satisfaisant",
+        medicaments: [
+          { nom: "Fluticasone", dosage: "125mcg", duree: "60 jours" }
+        ],
+        notes: "DEP à 92% de la théorique"
+      }
+    ]
+  },
+
+  // ── Patient 14 ─────────────────────────────────────────────────────────────
+  {
+    cin: "196609287201",
+    nom: "Ouali", prenom: "Djillali",
+    dateNaissance: new Date("1966-09-28"), sexe: "M",
+    adresse: { wilaya: "Constantine", commune: "Hamma Bouziane" },
+    groupeSanguin: "B+",
+    antecedents: ["Diabète type 2", "HTA", "Rétinopathie diabétique"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-12-05"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Diabète - déséquilibré",
+        glycemie: 2.4,
+        medicaments: [
+          { nom: "Insuline Glargine",  dosage: "30UI", duree: "90 jours" },
+          { nom: "Insuline Rapide",    dosage: "8UI",  duree: "90 jours" }
+        ],
+        notes: "HbA1c à 9.2% - renforcer l'insulinothérapie"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-03-10"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "HTA - bilan cardio",
+        tension: { systolique: 155, diastolique: 98 },
+        medicaments: [
+          { nom: "Amlodipine", dosage: "10mg", duree: "60 jours" },
+          { nom: "Ramipril",   dosage: "10mg", duree: "60 jours" }
+        ],
+        notes: "ECG - hypertrophie VG légère"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-08-18"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Diabète - amélioration",
+        glycemie: 1.8,
+        medicaments: [
+          { nom: "Insuline Glargine", dosage: "30UI", duree: "90 jours" }
+        ],
+        notes: "HbA1c à 7.8% - continuer schéma actuel"
+      }
+    ]
+  },
+
+  // ── Patient 15 ─────────────────────────────────────────────────────────────
+  {
+    cin: "199403116212",
+    nom: "Ziane", prenom: "Meriem",
+    dateNaissance: new Date("1994-03-11"), sexe: "F",
+    adresse: { wilaya: "Annaba", commune: "El Bouni" },
+    groupeSanguin: "AB+",
+    antecedents: ["Polyarthrite rhumatoïde"],
+    allergies: ["Méthotrexate"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-01-25"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "Polyarthrite rhumatoïde - poussée",
+        medicaments: [
+          { nom: "Léflunomide",    dosage: "20mg",  duree: "90 jours" },
+          { nom: "Prednisolone",   dosage: "20mg",  duree: "20 jours" }
+        ],
+        notes: "Intolérance MTX documentée - switcher Léflunomide"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-06-10"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "PAR - rémission partielle",
+        medicaments: [
+          { nom: "Léflunomide", dosage: "20mg", duree: "90 jours" }
+        ],
+        notes: "DAS28 à 2.9, objectif < 2.6"
+      }
+    ]
+  },
+
+  // ── Patient 16 ─────────────────────────────────────────────────────────────
+  {
+    cin: "198808259023",
+    nom: "Tebboune", prenom: "Walid",
+    dateNaissance: new Date("1988-08-25"), sexe: "M",
+    adresse: { wilaya: "Sétif", commune: "El Eulma" },
+    groupeSanguin: "O+",
+    antecedents: ["Dépression", "Insomnie"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-02-03"),
+        medecin: { nom: "Dr. Belkacem", specialite: "Psychiatrie" },
+        diagnostic: "Dépression modérée",
+        medicaments: [
+          { nom: "Sertraline",   dosage: "50mg",  duree: "60 jours" },
+          { nom: "Mélatonine",   dosage: "2mg",   duree: "30 jours" }
+        ],
+        notes: "Psychothérapie recommandée en parallèle"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-05-14"),
+        medecin: { nom: "Dr. Belkacem", specialite: "Psychiatrie" },
+        diagnostic: "Dépression - amélioration clinique",
+        medicaments: [
+          { nom: "Sertraline", dosage: "100mg", duree: "90 jours" }
+        ],
+        notes: "Score PHQ-9 passé de 16 à 8"
+      }
+    ]
+  },
+
+  // ── Patient 17 ─────────────────────────────────────────────────────────────
+  {
+    cin: "197101034423",
+    nom: "Berrahma", prenom: "Fatima Zohra",
+    dateNaissance: new Date("1971-01-03"), sexe: "F",
+    adresse: { wilaya: "Tizi Ouzou", commune: "Azazga" },
+    groupeSanguin: "A+",
+    antecedents: ["Ostéoporose", "Insuffisance veineuse"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-11-28"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "Ostéoporose - densitométrie T-score: -2.8",
+        medicaments: [
+          { nom: "Alendronate",  dosage: "70mg",    duree: "12 mois" },
+          { nom: "Calcium + D3", dosage: "1000mg/800UI", duree: "12 mois" }
+        ],
+        notes: "Éviter risques de chute. Exercice d'équilibre conseillé."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-05-30"),
+        medecin: { nom: "Dr. Ferhat", specialite: "Rhumatologie" },
+        diagnostic: "Ostéoporose - suivi semestriel",
+        medicaments: [
+          { nom: "Alendronate",  dosage: "70mg",         duree: "12 mois" },
+          { nom: "Calcium + D3", dosage: "1000mg/800UI", duree: "12 mois" }
+        ],
+        notes: "Bonne tolérance. Pas de fracture intercurrente."
+      }
+    ]
+  },
+
+  // ── Patient 18 ─────────────────────────────────────────────────────────────
+  {
+    cin: "198306146701",
+    nom: "Bellouti", prenom: "Samir",
+    dateNaissance: new Date("1983-06-14"), sexe: "M",
+    adresse: { wilaya: "Alger", commune: "Dar El Beida" },
+    groupeSanguin: "B+",
+    antecedents: ["Hépatite B chronique"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-01-12"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "Hépatite B chronique - charge virale élevée",
+        medicaments: [
+          { nom: "Ténofovir", dosage: "300mg", duree: "12 mois" }
+        ],
+        notes: "ADN VHB : 5.2 log. Bilan hépatique perturbé."
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-07-20"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "Hépatite B - réponse virologique",
+        medicaments: [
+          { nom: "Ténofovir", dosage: "300mg", duree: "12 mois" }
+        ],
+        notes: "ADN VHB indétectable. ALAT normalisée."
+      }
+    ]
+  },
+
+  // ── Patient 19 ─────────────────────────────────────────────────────────────
+  {
+    cin: "196504117812",
+    nom: "Benkhedda", prenom: "Ali",
+    dateNaissance: new Date("1965-04-11"), sexe: "M",
+    adresse: { wilaya: "Oran", commune: "Arzew" },
+    groupeSanguin: "O-",
+    antecedents: ["Diabète type 2", "HTA", "Neuropathie diabétique"],
+    allergies: ["Pénicilline"],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-10-30"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Neuropathie diabétique douloureuse",
+        medicaments: [
+          { nom: "Prégabaline", dosage: "75mg",  duree: "60 jours" },
+          { nom: "Metformine",  dosage: "1000mg", duree: "90 jours" }
+        ],
+        notes: "Douleurs neuropathiques membres inférieurs - NRS 6/10"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-02-20"),
+        medecin: { nom: "Dr. Boukhari", specialite: "Endocrinologie" },
+        diagnostic: "Neuropathie + Diabète - suivi",
+        glycemie: 1.95,
+        medicaments: [
+          { nom: "Prégabaline", dosage: "150mg", duree: "60 jours" },
+          { nom: "Metformine",  dosage: "1000mg", duree: "90 jours" }
+        ],
+        notes: "NRS 4/10 - amélioration partielle"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-08-05"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "HTA - contrôle",
+        tension: { systolique: 142, diastolique: 90 },
+        medicaments: [
+          { nom: "Amlodipine", dosage: "10mg", duree: "90 jours" }
+        ],
+        notes: "Adapter traitement HTA"
+      }
+    ]
+  },
+
+  // ── Patient 20 ─────────────────────────────────────────────────────────────
+  {
+    cin: "200106236901",
+    nom: "Aissaoui", prenom: "Sara",
+    dateNaissance: new Date("2001-06-23"), sexe: "F",
+    adresse: { wilaya: "Batna", commune: "Ain Touta" },
+    groupeSanguin: "A-",
+    antecedents: ["Syndrome de l'intestin irritable"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2024-03-08"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "SII à prédominance diarrhéique",
+        medicaments: [
+          { nom: "Mébévérine",     dosage: "200mg", duree: "30 jours" },
+          { nom: "Probiotiques",   dosage: "1 gél", duree: "30 jours" }
+        ],
+        notes: "Régime pauvre en FODMAPs conseillé"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-06-25"),
+        medecin: { nom: "Dr. Benali", specialite: "Gastroentérologie" },
+        diagnostic: "SII - amélioration après régime",
+        medicaments: [
+          { nom: "Mébévérine", dosage: "200mg", duree: "À la demande" }
+        ],
+        notes: "Bonne réponse au régime low-FODMAPs"
+      }
+    ]
+  }
+];
+
+db.patients.insertMany(patients);
+
+// ─── 1.3 : Collection analyses (référencée) ───────────────────────────────────
+// On récupère les _id insérés pour les liens
+const p1  = db.patients.findOne({ cin: "198001012300" })._id;
+const p2  = db.patients.findOne({ cin: "199505153012" })._id;
+const p3  = db.patients.findOne({ cin: "197212254501" })._id;
+const p5  = db.patients.findOne({ cin: "196807196712" })._id;
+const p8  = db.patients.findOne({ cin: "197804227823" })._id;
+const p10 = db.patients.findOne({ cin: "196301156023" })._id;
+const p14 = db.patients.findOne({ cin: "196609287201" })._id;
+
+const analyses = [
+  // Patient 1 – Ahmed Bensalem
+  {
+    patient_id: p1,
+    type: "Glycémie",
+    date: new Date("2024-01-14"),
+    resultats: { valeur: 2.1, unite: "g/L", norme: "< 1.26 g/L à jeun" },
+    laboratoire: "Labo Central Bab Ezzouar",
+    statut: "Anormal"
+  },
+  {
+    patient_id: p1,
+    type: "Lipidogramme",
+    date: new Date("2024-01-14"),
+    resultats: {
+      cholesterol_total: 2.3, LDL: 1.5, HDL: 0.45, triglycerides: 1.8,
+      unite: "g/L"
+    },
+    laboratoire: "Labo Central Bab Ezzouar",
+    statut: "Anormal"
+  },
+  // Patient 2 – Fatima Khelifi
+  {
+    patient_id: p2,
+    type: "NFS",
+    date: new Date("2023-11-02"),
+    resultats: {
+      hemoglobine: 13.2, leucocytes: 7800, plaquettes: 245000,
+      eosinophiles_pct: 8.2
+    },
+    laboratoire: "Labo Bir El Djir",
+    statut: "Éosinophilie (allergie)"
+  },
+  // Patient 3 – Abdelkader Meziane
+  {
+    patient_id: p3,
+    type: "Créatinine",
+    date: new Date("2024-01-21"),
+    resultats: { creatinine: 132, uree: 8.5, DFG_CKD_EPI: 62, unite: "µmol/L" },
+    laboratoire: "Labo El Khroub",
+    statut: "Légèrement élevée"
+  },
+  {
+    patient_id: p3,
+    type: "Glycémie",
+    date: new Date("2024-01-21"),
+    resultats: { valeur: 1.85, unite: "g/L", norme: "< 1.26 g/L à jeun" },
+    laboratoire: "Labo El Khroub",
+    statut: "Anormal"
+  },
+  // Patient 5 – Mokhtar Belhadj
+  {
+    patient_id: p5,
+    type: "Lipidogramme",
+    date: new Date("2024-01-07"),
+    resultats: {
+      cholesterol_total: 2.6, LDL: 2.1, HDL: 0.38, triglycerides: 2.2,
+      unite: "g/L"
+    },
+    laboratoire: "Labo Boufarik",
+    statut: "Dyslipidémie sévère"
+  },
+  {
+    patient_id: p5,
+    type: "ECG",
+    date: new Date("2024-01-08"),
+    resultats: { rythme: "Sinusal", FC: 72, axe: "Normal", anomalies: "Aucune" },
+    laboratoire: "Cabinet Dr. Mansouri",
+    statut: "Normal"
+  },
+  // Patient 8 – Nadia Djebbar
+  {
+    patient_id: p8,
+    type: "Glycémie",
+    date: new Date("2024-04-14"),
+    resultats: { valeur: 1.65, HbA1c: 7.1, unite: "g/L" },
+    laboratoire: "Labo Akbou",
+    statut: "Anormal"
+  },
+  {
+    patient_id: p8,
+    type: "NFS",
+    date: new Date("2024-04-14"),
+    resultats: { hemoglobine: 12.8, leucocytes: 6200, plaquettes: 198000 },
+    laboratoire: "Labo Akbou",
+    statut: "Normal"
+  },
+  // Patient 10 – Mostefa Bouzid
+  {
+    patient_id: p10,
+    type: "ECG",
+    date: new Date("2023-11-19"),
+    resultats: {
+      rythme: "Sinusal", FC: 65, axe: "Normal",
+      anomalies: "Séquelles antérieure ancienne"
+    },
+    laboratoire: "Cabinet Dr. Mansouri",
+    statut: "Séquelle"
+  },
+  {
+    patient_id: p10,
+    type: "Lipidogramme",
+    date: new Date("2023-11-19"),
+    resultats: {
+      cholesterol_total: 2.0, LDL: 1.3, HDL: 0.42, triglycerides: 1.4,
+      unite: "g/L"
+    },
+    laboratoire: "Labo Mascara",
+    statut: "Contrôlé sous statines"
+  },
+  // Patient 14 – Djillali Ouali
+  {
+    patient_id: p14,
+    type: "Glycémie",
+    date: new Date("2023-12-04"),
+    resultats: { valeur: 2.4, HbA1c: 9.2, unite: "g/L" },
+    laboratoire: "Labo Hamma Bouziane",
+    statut: "Déséquilibré"
+  },
+  {
+    patient_id: p14,
+    type: "NFS",
+    date: new Date("2024-03-09"),
+    resultats: { hemoglobine: 11.2, leucocytes: 7100, plaquettes: 210000 },
+    laboratoire: "Labo Hamma Bouziane",
+    statut: "Anémie légère"
+  }
+];
+
+db.analyses.insertMany(analyses);
+
+print("✅ Modélisation terminée. Patients insérés:", db.patients.countDocuments());
+print("✅ Analyses insérées:", db.analyses.countDocuments());
+
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║           EXERCICE 3 — PIPELINES D'AGRÉGATION                          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+use("medical_db");
+
+// ─── 3.1 : Distribution des diagnostics par wilaya ────────────────────────────
+print("=== 3.1 : Top diagnostics par wilaya ===");
+
+const diagParWilaya = db.patients.aggregate([
+  // Étape 1 : développer le tableau consultations (1 doc par consultation)
+  { $unwind: "$consultations" },
+
+  // Étape 2 : grouper par wilaya + diagnostic et compter
+  {
+    $group: {
+      _id: {
+        wilaya:     "$adresse.wilaya",
+        diagnostic: "$consultations.diagnostic"
+      },
+      count: { $sum: 1 }
+    }
+  },
+
+  // Étape 3 : trier par wilaya puis par count décroissant
+  { $sort: { "_id.wilaya": 1, count: -1 } },
+
+  // Étape 4 : garder les 20 premiers résultats
+  { $limit: 20 },
+
+  // Étape 5 : reformater pour la lisibilité
+  {
+    $project: {
+      _id:        0,
+      wilaya:     "$_id.wilaya",
+      diagnostic: "$_id.diagnostic",
+      count:      1
+    }
+  }
+]).toArray();
+
+printjson(diagParWilaya);
+
+
+// ─── 3.2 : Médicament le plus prescrit par spécialité ─────────────────────────
+print("\n=== 3.2 : Top médicaments par spécialité ===");
+
+const medsParSpecialite = db.patients.aggregate([
+  // 1. Développer consultations
+  { $unwind: "$consultations" },
+
+  // 2. Développer medicaments à l'intérieur de chaque consultation
+  { $unwind: "$consultations.medicaments" },
+
+  // 3. Grouper par spécialité + nom du médicament
+  {
+    $group: {
+      _id: {
+        specialite:  "$consultations.medecin.specialite",
+        medicament:  "$consultations.medicaments.nom"
+      },
+      prescriptions: { $sum: 1 }
+    }
+  },
+
+  // 4. Trier par spécialité puis par nombre de prescriptions décroissant
+  { $sort: { "_id.specialite": 1, prescriptions: -1 } },
+
+  // 5. Regrouper par spécialité pour ne garder que le top 1
+  {
+    $group: {
+      _id:           "$_id.specialite",
+      top_medicament: { $first: "$_id.medicament" },
+      prescriptions:  { $first: "$prescriptions" }
+    }
+  },
+
+  // 6. Tri final par nombre de prescriptions
+  { $sort: { prescriptions: -1 } },
+
+  // 7. Reformater
+  {
+    $project: {
+      _id:            0,
+      specialite:     "$_id",
+      top_medicament: 1,
+      prescriptions:  1
+    }
+  }
+]).toArray();
+
+printjson(medsParSpecialite);
+
+
+// ─── 3.3 : Évolution mensuelle des consultations ──────────────────────────────
+print("\n=== 3.3 : Consultations par mois (12 derniers mois) ===");
+
+const evolutionMensuelle = db.patients.aggregate([
+  // 1. Développer consultations
+  { $unwind: "$consultations" },
+
+  // 2. Filtrer les 12 derniers mois
+  {
+    $match: {
+      "consultations.date": {
+        $gte: new Date(new Date().setFullYear(new Date().getFullYear() - 1))
+      }
+    }
+  },
+
+  // 3. Grouper par année + mois
+  {
+    $group: {
+      _id: {
+        annee: { $year:  "$consultations.date" },
+        mois:  { $month: "$consultations.date" }
+      },
+      total_consultations: { $sum: 1 },
+      patients_distincts:  { $addToSet: "$_id" }
+    }
+  },
+
+  // 4. Trier chronologiquement
+  { $sort: { "_id.annee": 1, "_id.mois": 1 } },
+
+  // 5. Formater la date en "YYYY-MM" et compter les patients uniques
+  {
+    $project: {
+      _id:                0,
+      periode:            {
+        $concat: [
+          { $toString: "$_id.annee" },
+          "-",
+          {
+            $cond: [
+              { $lt: ["$_id.mois", 10] },
+              { $concat: ["0", { $toString: "$_id.mois" }] },
+              { $toString: "$_id.mois" }
+            ]
+          }
+        ]
+      },
+      total_consultations: 1,
+      nb_patients_distincts: { $size: "$patients_distincts" }
+    }
+  }
+]).toArray();
+
+printjson(evolutionMensuelle);
+
+
+// ─── 3.4 : Patients à risque multiple ─────────────────────────────────────────
+print("\n=== 3.4 : Profil patients à risque élevé ===");
+
+const patientsRisque = db.patients.aggregate([
+  // 1. Filtrer : antécédents Diabète + HTA ET âge > 60
+  {
+    $match: {
+      antecedents: { $all: ["Diabète type 2", "HTA"] },
+      dateNaissance: {
+        // âge > 60 ans = né avant aujourd'hui - 60 ans
+        $lt: new Date(new Date().setFullYear(new Date().getFullYear() - 60))
+      }
+    }
+  },
+
+  // 2. Calculer l'âge et le nombre de consultations
+  {
+    $addFields: {
+      age: {
+        $floor: {
+          $divide: [
+            { $subtract: [new Date(), "$dateNaissance"] },
+            1000 * 60 * 60 * 24 * 365.25
+          ]
+        }
+      },
+      nb_consultations: { $size: "$consultations" },
+      nb_antecedents:   { $size: "$antecedents"   }
+    }
+  },
+
+  // 3. Projection lisible
+  {
+    $project: {
+      _id:              0,
+      nom:              1,
+      prenom:           1,
+      age:              1,
+      wilaya:           "$adresse.wilaya",
+      antecedents:      1,
+      nb_antecedents:   1,
+      nb_consultations: 1,
+      groupeSanguin:    1
+    }
+  },
+
+  // 4. Statistiques globales du groupe à risque
+  // (décommenter pour avoir l'aggrégat au lieu du détail)
+  /*
+  {
+    $group: {
+      _id:                   null,
+      nb_patients_risque:    { $sum: 1 },
+      age_moyen:             { $avg: "$age" },
+      moy_consultations:     { $avg: "$nb_consultations" },
+      moy_antecedents:       { $avg: "$nb_antecedents" }
+    }
+  }
+  */
+
+  { $sort: { age: -1 } }
+]).toArray();
+
+printjson(patientsRisque);
+
+
+// ─── 3.5 : Rapport médecins ───────────────────────────────────────────────────
+print("\n=== 3.5 : Top 5 médecins & taux de ré-consultation ===");
+
+const rapportMedecins = db.patients.aggregate([
+  // 1. Développer consultations
+  { $unwind: "$consultations" },
+
+  // 2. Grouper par médecin :
+  //    - compter les consultations totales
+  //    - collecter les patient _id uniques via addToSet
+  {
+    $group: {
+      _id: {
+        nom:        "$consultations.medecin.nom",
+        specialite: "$consultations.medecin.specialite"
+      },
+      total_consultations: { $sum: 1 },
+      patients_uniques:    { $addToSet: "$_id" }
+    }
+  },
+
+  // 3. Calculer le nombre de patients uniques et le taux de ré-consultation
+  {
+    $addFields: {
+      nb_patients_uniques: { $size: "$patients_uniques" },
+      taux_reconsultation: {
+        $round: [
+          {
+            $multiply: [
+              {
+                $divide: [
+                  { $subtract: ["$total_consultations", { $size: "$patients_uniques" }] },
+                  { $size: "$patients_uniques" }
+                ]
+              },
+              100
+            ]
+          },
+          1
+        ]
+      }
+    }
+  },
+
+  // 4. Tri par total consultations décroissant
+  { $sort: { total_consultations: -1 } },
+
+  // 5. Garder les 5 premiers
+  { $limit: 5 },
+
+  // 6. Présentation finale
+  {
+    $project: {
+      _id:                  0,
+      medecin:              "$_id.nom",
+      specialite:           "$_id.specialite",
+      total_consultations:  1,
+      nb_patients_uniques:  1,
+      taux_reconsultation:  1  // en %
+    }
+  }
+]).toArray();
+
+printjson(rapportMedecins);
+
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║           EXERCICE 4 — INDEX ET OPTIMISATION                           ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+use("medical_db");
+
+// ─── 4.1 : Créer les index appropriés ────────────────────────────────────────
+
+// Index 1 : Recherche fréquente par wilaya + antécédents
+// Composé : d'abord le champ d'égalité (wilaya), ensuite le tableau (antecedents)
+db.patients.createIndex(
+  { "adresse.wilaya": 1, antecedents: 1 },
+  { name: "idx_wilaya_antecedents" }
+);
+
+// Index 2 : Recherche par date de consultation (champ imbriqué dans tableau)
+db.patients.createIndex(
+  { "consultations.date": 1 },
+  { name: "idx_consultations_date" }
+);
+
+// Index 3 : Texte sur diagnostics pour recherche full-text
+db.patients.createIndex(
+  { "consultations.diagnostic": "text", "consultations.notes": "text" },
+  {
+    name:     "idx_text_diagnostic_notes",
+    default_language: "french"
+  }
+);
+
+// Index 4 : Analyses par patient (clé de jointure pour $lookup)
+db.analyses.createIndex(
+  { patient_id: 1, date: -1 },
+  { name: "idx_analyses_patient_date" }
+);
+
+
+// ─── 4.2 : Comparer avec explain() ────────────────────────────────────────────
+
+const requeteTest = {
+  "adresse.wilaya": "Alger",
+  antecedents: "Diabète type 2"
+};
+
+// ── AVANT index (simulé en forçant un COLLSCAN) ──────────────────────────────
+print("=== AVANT index (hint: $natural force un collscan) ===");
+const explainAvant = db.patients
+  .find(requeteTest)
+  .hint({ $natural: 1 })           // force le balayage complet de la collection
+  .explain("executionStats");
+
+print("  Stage            :", explainAvant.executionStats.executionStages.stage);
+print("  docsExaminés     :", explainAvant.executionStats.totalDocsExamined);
+print("  docsRetournés    :", explainAvant.executionStats.nReturned);
+print("  temps (ms)       :", explainAvant.executionStats.executionTimeMillis);
+
+// ── APRÈS index ──────────────────────────────────────────────────────────────
+print("\n=== APRÈS index (utilisation de idx_wilaya_antecedents) ===");
+const explainApres = db.patients
+  .find(requeteTest)
+  .hint("idx_wilaya_antecedents")  // force l'utilisation de notre index
+  .explain("executionStats");
+
+const stageApres = explainApres.executionStats.executionStages;
+print("  Stage            :", stageApres.stage);          // FETCH (ou IXSCAN)
+print("  keysExaminées    :", explainApres.executionStats.totalKeysExamined);
+print("  docsExaminés     :", explainApres.executionStats.totalDocsExamined);
+print("  docsRetournés    :", explainApres.executionStats.nReturned);
+print("  temps (ms)       :", explainApres.executionStats.executionTimeMillis);
+
+/*
+  Tableau de comparaison attendu :
+  ┌──────────────────────┬────────────────┬───────────────┐
+  │ Métrique             │ AVANT (COLLSCAN│ APRÈS (IXSCAN)│
+  ├──────────────────────┼────────────────┼───────────────┤
+  │ Stage                │ COLLSCAN       │ FETCH/IXSCAN  │
+  │ totalDocsExamined    │ 20 (= tous)    │ 2-3           │
+  │ totalKeysExamined    │ 0              │ 2-3           │
+  │ nReturned            │ même valeur    │ même valeur   │
+  │ executionTimeMillis  │ plus élevé     │ plus bas      │
+  └──────────────────────┴────────────────┴───────────────┘
+*/
+
+
+// ─── 4.4 : Index TTL pour archivage automatique ───────────────────────────────
+// Les analyses expirent 5 ans après leur date (5 * 365.25 * 24 * 3600 secondes)
+db.analyses.createIndex(
+  { date: 1 },
+  {
+    expireAfterSeconds: 157_788_000,   // ≈ 5 ans
+    name: "idx_ttl_analyses_5ans"
+  }
+);
+
+print("\n✅ Index créés :");
+printjson(db.patients.getIndexes().map(i => i.name));
+printjson(db.analyses.getIndexes().map(i => i.name));
