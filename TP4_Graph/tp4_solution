@@ -1,0 +1,541 @@
+# TP4 – UniConnect DZ : Solutions complètes (Neo4j / GDS)
+
+---
+
+## Exercice 1 : Création du graphe
+
+### 1.1 à 1.3 – Contraintes, Compétences, Cours (fournis — aucun changement)
+
+```cypher
+MATCH (n) DETACH DELETE n;
+
+CREATE CONSTRAINT etudiant_id   IF NOT EXISTS FOR (e:Etudiant)    REQUIRE e.id  IS UNIQUE;
+CREATE CONSTRAINT cours_code    IF NOT EXISTS FOR (c:Cours)       REQUIRE c.code IS UNIQUE;
+CREATE CONSTRAINT competence_nom IF NOT EXISTS FOR (c:Competence) REQUIRE c.nom  IS UNIQUE;
+
+UNWIND [
+  {nom: "Python",          categorie: "Programmation"},
+  {nom: "Java",            categorie: "Programmation"},
+  {nom: "SQL",             categorie: "Bases de Données"},
+  {nom: "NoSQL",           categorie: "Bases de Données"},
+  {nom: "Machine Learning",categorie: "IA"},
+  {nom: "Deep Learning",   categorie: "IA"},
+  {nom: "React",           categorie: "Web"},
+  {nom: "Docker",          categorie: "DevOps"},
+  {nom: "Linux",           categorie: "Systèmes"},
+  {nom: "Réseaux",         categorie: "Infrastructure"}
+] AS comp
+MERGE (:Competence {nom: comp.nom, categorie: comp.categorie});
+
+UNWIND [
+  {code: "INFO401", intitule: "Bases de Données Avancées", credits: 6, dept: "Informatique"},
+  {code: "INFO402", intitule: "Intelligence Artificielle", credits: 6, dept: "Informatique"},
+  {code: "INFO403", intitule: "Développement Web",         credits: 4, dept: "Informatique"},
+  {code: "INFO404", intitule: "Systèmes Distribués",       credits: 5, dept: "Informatique"},
+  {code: "INFO405", intitule: "Cloud Computing",           credits: 4, dept: "Informatique"}
+] AS cours
+MERGE (:Cours {code: cours.code, intitule: cours.intitule,
+               credits: cours.credits, departement: cours.dept});
+```
+
+---
+
+### 1.4 – 50 étudiants avec données algériennes réalistes
+
+```cypher
+UNWIND [
+  {id:"E001", prenom:"Ahmed",    nom:"Bensalem",   universite:"USTHB", filiere:"Informatique",  annee:3, ville:"Alger"},
+  {id:"E002", prenom:"Fatima",   nom:"Ouali",      universite:"USTHB", filiere:"Informatique",  annee:3, ville:"Alger"},
+  {id:"E003", prenom:"Yasmina", nom:"Khelifi",    universite:"UMBB",  filiere:"GL",            annee:2, ville:"Boumerdes"},
+  {id:"E004", prenom:"Karim",   nom:"Meziane",    universite:"USTO",  filiere:"Telecoms",      annee:4, ville:"Oran"},
+  {id:"E005", prenom:"Nadia",   nom:"Hamidi",     universite:"UMC",   filiere:"Mathématiques", annee:1, ville:"Constantine"},
+  {id:"E006", prenom:"Yacine",  nom:"Boukhalfa",  universite:"UBMA",  filiere:"Electronique",  annee:3, ville:"Annaba"},
+  {id:"E007", prenom:"Amira",   nom:"Saadaoui",   universite:"USTHB", filiere:"GL",            annee:2, ville:"Alger"},
+  {id:"E008", prenom:"Bilal",   nom:"Chaoui",     universite:"UMBB",  filiere:"Informatique",  annee:4, ville:"Boumerdes"},
+  {id:"E009", prenom:"Rima",    nom:"Benali",     universite:"USTO",  filiere:"Telecoms",      annee:1, ville:"Oran"},
+  {id:"E010", prenom:"Sofiane", nom:"Larabi",     universite:"UMC",   filiere:"Informatique",  annee:3, ville:"Constantine"},
+  {id:"E011", prenom:"Imene",   nom:"Tebbal",     universite:"UBMA",  filiere:"GL",            annee:2, ville:"Annaba"},
+  {id:"E012", prenom:"Djamel",  nom:"Hadj",       universite:"USTHB", filiere:"Electronique",  annee:4, ville:"Alger"},
+  {id:"E013", prenom:"Lyna",    nom:"Meddah",     universite:"UMBB",  filiere:"Mathématiques", annee:3, ville:"Boumerdes"},
+  {id:"E014", prenom:"Amine",   nom:"Rahmani",    universite:"USTO",  filiere:"Informatique",  annee:2, ville:"Oran"},
+  {id:"E015", prenom:"Sonia",   nom:"Djebbar",    universite:"UMC",   filiere:"GL",            annee:1, ville:"Constantine"},
+  {id:"E016", prenom:"Nassim",  nom:"Belkaid",    universite:"UBMA",  filiere:"Telecoms",      annee:3, ville:"Annaba"},
+  {id:"E017", prenom:"Meriem",  nom:"Ferhat",     universite:"USTHB", filiere:"Informatique",  annee:4, ville:"Alger"},
+  {id:"E018", prenom:"Walid",   nom:"Benamara",   universite:"UMBB",  filiere:"Electronique",  annee:2, ville:"Boumerdes"},
+  {id:"E019", prenom:"Asma",    nom:"Guerfi",     universite:"USTO",  filiere:"Mathématiques", annee:3, ville:"Oran"},
+  {id:"E020", prenom:"Hocine",  nom:"Kaddour",    universite:"UMC",   filiere:"Informatique",  annee:1, ville:"Constantine"},
+  {id:"E021", prenom:"Sabrina", nom:"Bouzid",     universite:"UBMA",  filiere:"GL",            annee:4, ville:"Annaba"},
+  {id:"E022", prenom:"Rachid",  nom:"Mansouri",   universite:"USTHB", filiere:"Telecoms",      annee:2, ville:"Alger"},
+  {id:"E023", prenom:"Houda",   nom:"Benzerga",   universite:"UMBB",  filiere:"Informatique",  annee:3, ville:"Boumerdes"},
+  {id:"E024", prenom:"Fares",   nom:"Aissani",    universite:"USTO",  filiere:"Electronique",  annee:4, ville:"Oran"},
+  {id:"E025", prenom:"Kahina",  nom:"Touati",     universite:"UMC",   filiere:"GL",            annee:1, ville:"Constantine"},
+  {id:"E026", prenom:"Mehdi",   nom:"Brahim",     universite:"UBMA",  filiere:"Informatique",  annee:3, ville:"Annaba"},
+  {id:"E027", prenom:"Rania",   nom:"Cherif",     universite:"USTHB", filiere:"Mathématiques", annee:2, ville:"Alger"},
+  {id:"E028", prenom:"Lotfi",   nom:"Sekhri",     universite:"UMBB",  filiere:"Telecoms",      annee:4, ville:"Boumerdes"},
+  {id:"E029", prenom:"Cylia",   nom:"Bouziane",   universite:"USTO",  filiere:"Informatique",  annee:3, ville:"Oran"},
+  {id:"E030", prenom:"Tarek",   nom:"Hadjadj",    universite:"UMC",   filiere:"GL",            annee:2, ville:"Constantine"},
+  {id:"E031", prenom:"Lynda",   nom:"Benaissa",   universite:"UBMA",  filiere:"Electronique",  annee:1, ville:"Annaba"},
+  {id:"E032", prenom:"Ryad",    nom:"Ghozlane",   universite:"USTHB", filiere:"Informatique",  annee:4, ville:"Alger"},
+  {id:"E033", prenom:"Samia",   nom:"Taleb",      universite:"UMBB",  filiere:"GL",            annee:3, ville:"Boumerdes"},
+  {id:"E034", prenom:"Adel",    nom:"Mebarki",    universite:"USTO",  filiere:"Telecoms",      annee:2, ville:"Oran"},
+  {id:"E035", prenom:"Nawal",   nom:"Zerrouki",   universite:"UMC",   filiere:"Mathématiques", annee:3, ville:"Constantine"},
+  {id:"E036", prenom:"Islam",   nom:"Boudia",     universite:"UBMA",  filiere:"Informatique",  annee:4, ville:"Annaba"},
+  {id:"E037", prenom:"Sihem",   nom:"Benkhaled",  universite:"USTHB", filiere:"GL",            annee:1, ville:"Alger"},
+  {id:"E038", prenom:"Hamza",   nom:"Khaldi",     universite:"UMBB",  filiere:"Electronique",  annee:2, ville:"Boumerdes"},
+  {id:"E039", prenom:"Wafa",    nom:"Belouar",    universite:"USTO",  filiere:"Informatique",  annee:3, ville:"Oran"},
+  {id:"E040", prenom:"Ilyes",   nom:"Mekki",      universite:"UMC",   filiere:"Telecoms",      annee:4, ville:"Constantine"},
+  {id:"E041", prenom:"Farida",  nom:"Benhamdane", universite:"UBMA",  filiere:"GL",            annee:2, ville:"Annaba"},
+  {id:"E042", prenom:"Anis",    nom:"Sadaoui",    universite:"USTHB", filiere:"Informatique",  annee:3, ville:"Alger"},
+  {id:"E043", prenom:"Ghania",  nom:"Benkhelifa", universite:"UMBB",  filiere:"Mathématiques", annee:1, ville:"Boumerdes"},
+  {id:"E044", prenom:"Salim",   nom:"Cheriet",    universite:"USTO",  filiere:"Electronique",  annee:4, ville:"Oran"},
+  {id:"E045", prenom:"Nour",    nom:"Abdelouahab",universite:"UMC",   filiere:"GL",            annee:3, ville:"Constantine"},
+  {id:"E046", prenom:"Oussama", nom:"Maamri",     universite:"UBMA",  filiere:"Informatique",  annee:2, ville:"Annaba"},
+  {id:"E047", prenom:"Chaima",  nom:"Benbernou",  universite:"USTHB", filiere:"Telecoms",      annee:4, ville:"Alger"},
+  {id:"E048", prenom:"Ziad",    nom:"Haouam",     universite:"UMBB",  filiere:"Informatique",  annee:3, ville:"Boumerdes"},
+  {id:"E049", prenom:"Mouna",   nom:"Bouzekri",   universite:"USTO",  filiere:"GL",            annee:2, ville:"Oran"},
+  {id:"E050", prenom:"Reda",    nom:"Bendriss",   universite:"UMC",   filiere:"Informatique",  annee:1, ville:"Constantine"}
+] AS data
+MERGE (e:Etudiant {id: data.id})
+SET e += data;
+```
+
+---
+
+### 1.5 – Relations CONNAIT, SUIT, MAITRISE
+
+#### Relations CONNAIT (graphe connexe garanti)
+
+La stratégie ci-dessous crée trois couches de connexions pour garantir qu'il n'y a aucun nœud isolé :
+
+1. **Chaîne linéaire** sur tous les étudiants → connexité garantie  
+2. **Liens par université** → clusters naturels  
+3. **Liens par filière** → ponts inter-universités
+
+```cypher
+// ── Couche 1 : chaîne linéaire E001→E002→...→E050 ───────────────────────────
+// Garantit la connexité globale du graphe
+UNWIND [
+  ["E001","E002"],["E002","E003"],["E003","E004"],["E004","E005"],
+  ["E005","E006"],["E006","E007"],["E007","E008"],["E008","E009"],
+  ["E009","E010"],["E010","E011"],["E011","E012"],["E012","E013"],
+  ["E013","E014"],["E014","E015"],["E015","E016"],["E016","E017"],
+  ["E017","E018"],["E018","E019"],["E019","E020"],["E020","E021"],
+  ["E021","E022"],["E022","E023"],["E023","E024"],["E024","E025"],
+  ["E025","E026"],["E026","E027"],["E027","E028"],["E028","E029"],
+  ["E029","E030"],["E030","E031"],["E031","E032"],["E032","E033"],
+  ["E033","E034"],["E034","E035"],["E035","E036"],["E036","E037"],
+  ["E037","E038"],["E038","E039"],["E039","E040"],["E040","E041"],
+  ["E041","E042"],["E042","E043"],["E043","E044"],["E044","E045"],
+  ["E045","E046"],["E046","E047"],["E047","E048"],["E048","E049"],
+  ["E049","E050"],["E050","E001"]   -- boucle pour fermer l'anneau
+] AS paire
+MATCH (a:Etudiant {id: paire[0]}), (b:Etudiant {id: paire[1]})
+MERGE (a)-[:CONNAIT]-(b);
+
+// ── Couche 2 : connexions intra-université ───────────────────────────────────
+// Chaque étudiant connaît 2–3 camarades de la même université
+UNWIND [
+  ["E001","E007"],["E001","E017"],["E007","E017"],["E007","E022"],
+  ["E017","E022"],["E022","E027"],["E027","E032"],["E032","E037"],
+  ["E037","E042"],["E042","E047"],["E002","E008"],["E008","E013"],
+  ["E013","E018"],["E018","E023"],["E023","E028"],["E028","E033"],
+  ["E033","E038"],["E038","E043"],["E043","E048"],["E003","E009"],-- UMBB/USTO mixte
+  ["E004","E014"],["E014","E024"],["E024","E029"],["E029","E034"],
+  ["E034","E039"],["E039","E044"],["E044","E049"],["E005","E010"],
+  ["E010","E015"],["E015","E020"],["E020","E025"],["E025","E030"],
+  ["E030","E035"],["E035","E040"],["E040","E045"],["E006","E011"],
+  ["E011","E016"],["E016","E021"],["E021","E026"],["E026","E031"],
+  ["E031","E036"],["E036","E041"],["E041","E046"],["E046","E050"]
+] AS paire
+MATCH (a:Etudiant {id: paire[0]}), (b:Etudiant {id: paire[1]})
+MERGE (a)-[:CONNAIT]-(b);
+
+// ── Couche 3 : ponts inter-universités (même filière) ───────────────────────
+UNWIND [
+  ["E001","E010"],["E001","E014"],["E002","E023"],["E003","E007"],
+  ["E005","E035"],["E006","E024"],["E012","E038"],["E019","E035"],
+  ["E020","E036"],["E029","E039"],["E032","E042"],["E047","E028"]
+] AS paire
+MATCH (a:Etudiant {id: paire[0]}), (b:Etudiant {id: paire[1]})
+MERGE (a)-[:CONNAIT]-(b);
+```
+
+#### Relations SUIT (étudiant → cours, avec note)
+
+```cypher
+// Chaque étudiant suit 2 à 4 cours — répartition réaliste
+UNWIND [
+  {eid:"E001", code:"INFO401", note:16.5, semestre:"S5"},
+  {eid:"E001", code:"INFO402", note:14.0, semestre:"S5"},
+  {eid:"E002", code:"INFO401", note:13.5, semestre:"S5"},
+  {eid:"E002", code:"INFO403", note:17.0, semestre:"S5"},
+  {eid:"E003", code:"INFO403", note:15.0, semestre:"S4"},
+  {eid:"E003", code:"INFO404", note:12.5, semestre:"S4"},
+  {eid:"E004", code:"INFO404", note:18.0, semestre:"S6"},
+  {eid:"E004", code:"INFO405", note:16.0, semestre:"S6"},
+  {eid:"E005", code:"INFO401", note:11.0, semestre:"S2"},
+  {eid:"E006", code:"INFO402", note:15.5, semestre:"S5"},
+  {eid:"E006", code:"INFO404", note:14.0, semestre:"S5"},
+  {eid:"E007", code:"INFO401", note:17.5, semestre:"S4"},
+  {eid:"E007", code:"INFO403", note:16.0, semestre:"S4"},
+  {eid:"E008", code:"INFO402", note:13.0, semestre:"S6"},
+  {eid:"E008", code:"INFO405", note:15.0, semestre:"S6"},
+  {eid:"E009", code:"INFO404", note:12.0, semestre:"S2"},
+  {eid:"E010", code:"INFO401", note:14.5, semestre:"S5"},
+  {eid:"E010", code:"INFO402", note:16.5, semestre:"S5"},
+  {eid:"E011", code:"INFO403", note:13.5, semestre:"S4"},
+  {eid:"E012", code:"INFO404", note:17.0, semestre:"S6"},
+  {eid:"E012", code:"INFO405", note:15.5, semestre:"S6"},
+  {eid:"E013", code:"INFO401", note:11.5, semestre:"S5"},
+  {eid:"E014", code:"INFO402", note:14.0, semestre:"S4"},
+  {eid:"E014", code:"INFO403", note:16.0, semestre:"S4"},
+  {eid:"E015", code:"INFO401", note:12.5, semestre:"S2"},
+  {eid:"E016", code:"INFO404", note:15.0, semestre:"S5"},
+  {eid:"E017", code:"INFO402", note:18.0, semestre:"S6"},
+  {eid:"E017", code:"INFO405", note:16.5, semestre:"S6"},
+  {eid:"E018", code:"INFO403", note:13.0, semestre:"S4"},
+  {eid:"E019", code:"INFO401", note:14.0, semestre:"S5"},
+  {eid:"E020", code:"INFO402", note:12.0, semestre:"S2"},
+  {eid:"E021", code:"INFO403", note:16.5, semestre:"S6"},
+  {eid:"E021", code:"INFO404", note:15.0, semestre:"S6"},
+  {eid:"E022", code:"INFO405", note:14.5, semestre:"S4"},
+  {eid:"E023", code:"INFO401", note:17.0, semestre:"S5"},
+  {eid:"E024", code:"INFO402", note:15.5, semestre:"S6"},
+  {eid:"E025", code:"INFO403", note:13.5, semestre:"S2"},
+  {eid:"E026", code:"INFO404", note:16.0, semestre:"S5"},
+  {eid:"E027", code:"INFO401", note:12.5, semestre:"S4"},
+  {eid:"E028", code:"INFO405", note:14.0, semestre:"S6"},
+  {eid:"E029", code:"INFO402", note:15.0, semestre:"S5"},
+  {eid:"E030", code:"INFO403", note:13.0, semestre:"S4"},
+  {eid:"E031", code:"INFO401", note:11.0, semestre:"S2"},
+  {eid:"E032", code:"INFO404", note:17.5, semestre:"S6"},
+  {eid:"E033", code:"INFO402", note:14.5, semestre:"S5"},
+  {eid:"E034", code:"INFO405", note:16.0, semestre:"S6"},
+  {eid:"E035", code:"INFO401", note:13.5, semestre:"S5"},
+  {eid:"E036", code:"INFO402", note:15.0, semestre:"S6"},
+  {eid:"E037", code:"INFO403", note:12.0, semestre:"S2"},
+  {eid:"E038", code:"INFO404", note:14.5, semestre:"S4"},
+  {eid:"E039", code:"INFO401", note:16.5, semestre:"S5"},
+  {eid:"E040", code:"INFO405", note:15.5, semestre:"S6"},
+  {eid:"E041", code:"INFO402", note:13.0, semestre:"S4"},
+  {eid:"E042", code:"INFO403", note:17.0, semestre:"S5"},
+  {eid:"E043", code:"INFO401", note:11.5, semestre:"S2"},
+  {eid:"E044", code:"INFO404", note:16.0, semestre:"S6"},
+  {eid:"E045", code:"INFO402", note:14.0, semestre:"S5"},
+  {eid:"E046", code:"INFO403", note:15.5, semestre:"S4"},
+  {eid:"E047", code:"INFO405", note:18.0, semestre:"S6"},
+  {eid:"E048", code:"INFO401", note:13.5, semestre:"S5"},
+  {eid:"E049", code:"INFO402", note:14.5, semestre:"S4"},
+  {eid:"E050", code:"INFO403", note:12.5, semestre:"S2"}
+] AS r
+MATCH (e:Etudiant {id: r.eid}), (c:Cours {code: r.code})
+MERGE (e)-[:SUIT {note: r.note, semestre: r.semestre}]->(c);
+```
+
+#### Relations MAITRISE (étudiant → compétence, avec niveau)
+
+```cypher
+// Niveaux : 1=débutant, 2=intermédiaire, 3=avancé, 4=expert
+UNWIND [
+  {eid:"E001", comp:"Python",          niveau:3},
+  {eid:"E001", comp:"SQL",             niveau:2},
+  {eid:"E002", comp:"Java",            niveau:2},
+  {eid:"E002", comp:"React",           niveau:3},
+  {eid:"E003", comp:"Python",          niveau:2},
+  {eid:"E003", comp:"Docker",          niveau:1},
+  {eid:"E004", comp:"Réseaux",         niveau:4},
+  {eid:"E004", comp:"Linux",           niveau:3},
+  {eid:"E005", comp:"SQL",             niveau:1},
+  {eid:"E006", comp:"Java",            niveau:3},
+  {eid:"E006", comp:"Linux",           niveau:2},
+  {eid:"E007", comp:"Python",          niveau:4},
+  {eid:"E007", comp:"Machine Learning",niveau:2},
+  {eid:"E008", comp:"Deep Learning",   niveau:3},
+  {eid:"E008", comp:"Python",          niveau:3},
+  {eid:"E009", comp:"Réseaux",         niveau:2},
+  {eid:"E010", comp:"SQL",             niveau:3},
+  {eid:"E010", comp:"NoSQL",           niveau:2},
+  {eid:"E011", comp:"React",           niveau:2},
+  {eid:"E012", comp:"Docker",          niveau:3},
+  {eid:"E012", comp:"Linux",           niveau:4},
+  {eid:"E013", comp:"SQL",             niveau:2},
+  {eid:"E014", comp:"Machine Learning",niveau:3},
+  {eid:"E014", comp:"Python",          niveau:3},
+  {eid:"E015", comp:"Java",            niveau:1},
+  {eid:"E016", comp:"Réseaux",         niveau:3},
+  {eid:"E017", comp:"Deep Learning",   niveau:4},
+  {eid:"E017", comp:"Machine Learning",niveau:4},
+  {eid:"E018", comp:"React",           niveau:3},
+  {eid:"E018", comp:"Docker",          niveau:2},
+  {eid:"E019", comp:"SQL",             niveau:2},
+  {eid:"E020", comp:"Python",          niveau:1},
+  {eid:"E021", comp:"Java",            niveau:3},
+  {eid:"E021", comp:"React",           niveau:2},
+  {eid:"E022", comp:"Linux",           niveau:3},
+  {eid:"E023", comp:"NoSQL",           niveau:3},
+  {eid:"E023", comp:"SQL",             niveau:3},
+  {eid:"E024", comp:"Réseaux",         niveau:4},
+  {eid:"E024", comp:"Linux",           niveau:3},
+  {eid:"E025", comp:"Python",          niveau:2},
+  {eid:"E026", comp:"Docker",          niveau:3},
+  {eid:"E026", comp:"Linux",           niveau:2},
+  {eid:"E027", comp:"SQL",             niveau:3},
+  {eid:"E028", comp:"Réseaux",         niveau:3},
+  {eid:"E029", comp:"Machine Learning",niveau:2},
+  {eid:"E030", comp:"React",           niveau:3},
+  {eid:"E031", comp:"Java",            niveau:1},
+  {eid:"E032", comp:"Python",          niveau:4},
+  {eid:"E032", comp:"NoSQL",           niveau:3},
+  {eid:"E033", comp:"Deep Learning",   niveau:2},
+  {eid:"E034", comp:"Linux",           niveau:4},
+  {eid:"E035", comp:"SQL",             niveau:3},
+  {eid:"E036", comp:"Machine Learning",niveau:3},
+  {eid:"E037", comp:"React",           niveau:2},
+  {eid:"E038", comp:"Docker",          niveau:3},
+  {eid:"E039", comp:"Python",          niveau:3},
+  {eid:"E040", comp:"Réseaux",         niveau:3},
+  {eid:"E041", comp:"Java",            niveau:2},
+  {eid:"E042", comp:"NoSQL",           niveau:4},
+  {eid:"E043", comp:"SQL",             niveau:1},
+  {eid:"E044", comp:"Linux",           niveau:3},
+  {eid:"E045", comp:"Deep Learning",   niveau:3},
+  {eid:"E046", comp:"Python",          niveau:2},
+  {eid:"E047", comp:"Réseaux",         niveau:4},
+  {eid:"E048", comp:"SQL",             niveau:2},
+  {eid:"E049", comp:"Machine Learning",niveau:2},
+  {eid:"E050", comp:"Python",          niveau:1}
+] AS r
+MATCH (e:Etudiant {id: r.eid}), (c:Competence {nom: r.comp})
+MERGE (e)-[:MAITRISE {niveau: r.niveau}]->(c);
+```
+
+#### Relations REQUIERT (cours → compétence) — nécessaires pour l'exercice 3.5
+
+```cypher
+UNWIND [
+  {code:"INFO401", comp:"SQL"},
+  {code:"INFO401", comp:"NoSQL"},
+  {code:"INFO402", comp:"Machine Learning"},
+  {code:"INFO402", comp:"Python"},
+  {code:"INFO402", comp:"Deep Learning"},
+  {code:"INFO403", comp:"React"},
+  {code:"INFO403", comp:"Python"},
+  {code:"INFO404", comp:"Linux"},
+  {code:"INFO404", comp:"Réseaux"},
+  {code:"INFO405", comp:"Docker"},
+  {code:"INFO405", comp:"Linux"},
+  {code:"INFO405", comp:"Réseaux"}
+] AS r
+MATCH (c:Cours {code: r.code}), (comp:Competence {nom: r.comp})
+MERGE (c)-[:REQUIERT]->(comp);
+```
+
+#### Vérification finale
+
+```cypher
+MATCH (n)     RETURN labels(n)[0] AS type, count(n) AS total ORDER BY total DESC;
+MATCH ()-[r]->() RETURN type(r)  AS relation, count(r) AS total ORDER BY total DESC;
+```
+
+**Résultats attendus :**
+
+| Type | Total |
+|---|---|
+| Etudiant | 50 |
+| Competence | 10 |
+| Cours | 5 |
+| CONNAIT | ~100–130 |
+| SUIT | ~60 |
+| MAITRISE | ~65 |
+| REQUIERT | 12 |
+
+---
+
+## Exercice 3 : Algorithmes de Graphe avec GDS
+
+### 3.1 – Plus court chemin entre Ahmed et Yasmina
+
+```cypher
+-- Chemin via relations CONNAIT (non pondéré)
+MATCH p = shortestPath(
+  (a:Etudiant {prenom: "Ahmed"})-[:CONNAIT*..10]-(b:Etudiant {prenom: "Yasmina"})
+)
+RETURN [n IN nodes(p) | n.prenom + " (" + n.universite + ")"] AS chemin,
+       length(p) AS nb_intermediaires;
+```
+
+**Lecture du résultat :** si `nb_intermediaires = 2`, Ahmed et Yasmina ont 1 contact en commun (degré de séparation = 2).
+
+---
+
+### 3.2 – Centralité de degré (top 10 des plus connectés)
+
+```cypher
+-- Créer la projection en mémoire (graphe non orienté)
+CALL gds.graph.project(
+  'reseau_social',
+  'Etudiant',
+  { CONNAIT: { orientation: 'UNDIRECTED' } }
+);
+
+-- Calculer et afficher le top 10
+CALL gds.degree.stream('reseau_social')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).prenom    AS etudiant,
+       gds.util.asNode(nodeId).universite AS universite,
+       gds.util.asNode(nodeId).filiere    AS filiere,
+       toInteger(score)                   AS nb_connexions
+ORDER BY score DESC
+LIMIT 10;
+```
+
+> **Pourquoi `UNDIRECTED` ?** La relation `CONNAIT` est symétrique (si A connaît B, B connaît A). Utiliser `UNDIRECTED` évite de compter chaque lien deux fois.
+
+---
+
+### 3.3 – Détection de communautés (algorithme de Louvain)
+
+```cypher
+-- L'algorithme de Louvain maximise la modularité du graphe
+CALL gds.louvain.stream('reseau_social')
+YIELD nodeId, communityId
+WITH communityId,
+     collect(gds.util.asNode(nodeId).prenom)      AS membres,
+     collect(gds.util.asNode(nodeId).universite)   AS universites
+RETURN communityId,
+       size(membres)      AS taille,
+       membres[0..5]      AS exemple_membres,
+       -- Université dominante dans la communauté
+       apoc.coll.frequenciesAsMap(universites)     AS repartition_univ
+ORDER BY taille DESC;
+```
+
+**Variante sans APOC (si le plugin n'est pas installé) :**
+
+```cypher
+CALL gds.louvain.stream('reseau_social')
+YIELD nodeId, communityId
+WITH communityId,
+     collect(gds.util.asNode(nodeId).prenom)    AS membres,
+     collect(gds.util.asNode(nodeId).universite) AS universites
+RETURN communityId,
+       size(membres)  AS taille,
+       membres[0..5]  AS exemple_membres
+ORDER BY taille DESC;
+```
+
+> **Interprétation :** Les communautés Louvain correspondent souvent aux universités ou aux filières — c'est le signe que le graphe modélise bien la réalité sociale.
+
+---
+
+### 3.4 – Recommandation de contacts pour Ahmed
+
+```cypher
+-- Score = amis_communs × 3 + cours_communs × 2 + (même_filière ? 1 : 0)
+MATCH (moi:Etudiant {prenom: "Ahmed"})
+
+// ── Amis en commun ─────────────────────────────────────────────────────────
+OPTIONAL MATCH (moi)-[:CONNAIT]-(ami_commun:Etudiant)-[:CONNAIT]-(suggestion:Etudiant)
+WHERE suggestion <> moi
+  AND NOT (moi)-[:CONNAIT]-(suggestion)  -- ne pas recommander quelqu'un déjà connu
+
+WITH moi, suggestion, count(DISTINCT ami_commun) AS nb_amis_communs
+
+// ── Cours en commun ────────────────────────────────────────────────────────
+OPTIONAL MATCH (moi)-[:SUIT]->(cours_commun:Cours)<-[:SUIT]-(suggestion)
+
+WITH moi, suggestion, nb_amis_communs, count(DISTINCT cours_commun) AS nb_cours_communs
+
+// ── Même filière ───────────────────────────────────────────────────────────
+WITH moi, suggestion, nb_amis_communs, nb_cours_communs,
+     CASE WHEN moi.filiere = suggestion.filiere THEN 1 ELSE 0 END AS meme_filiere
+
+// ── Score final ────────────────────────────────────────────────────────────
+WITH suggestion,
+     nb_amis_communs,
+     nb_cours_communs,
+     meme_filiere,
+     (nb_amis_communs * 3 + nb_cours_communs * 2 + meme_filiere) AS score
+
+WHERE score > 0
+
+RETURN suggestion.prenom + " " + suggestion.nom AS suggestion,
+       suggestion.universite                      AS universite,
+       suggestion.filiere                         AS filiere,
+       nb_amis_communs                            AS amis_communs,
+       nb_cours_communs                           AS cours_communs,
+       meme_filiere                               AS meme_filiere,
+       score
+ORDER BY score DESC
+LIMIT 5;
+```
+
+**Exemple de résultat attendu :**
+
+| suggestion | universite | amis_communs | cours_communs | meme_filiere | score |
+|---|---|---|---|---|---|
+| Fatima Ouali | USTHB | 3 | 1 | 1 | 12 |
+| Sofiane Larabi | UMC | 2 | 1 | 1 | 9 |
+| Meriem Ferhat | USTHB | 2 | 0 | 1 | 7 |
+
+---
+
+### 3.5 – Chemin de compétences vers Machine Learning
+
+```cypher
+-- Quels cours mènent (via REQUIERT) à la compétence Machine Learning ?
+MATCH path = (debut:Cours)-[:REQUIERT*]->(but:Competence {nom: "Machine Learning"})
+RETURN [n IN nodes(path) |
+  CASE WHEN n:Cours      THEN "📘 " + n.intitule
+       WHEN n:Competence THEN "🎯 " + n.nom
+  END
+] AS parcours_apprentissage,
+length(path) AS profondeur
+ORDER BY profondeur;
+```
+
+**Résultat attendu avec le schéma défini :**
+
+```
+📘 Intelligence Artificielle → 🎯 Machine Learning
+📘 Intelligence Artificielle → 🎯 Machine Learning  (via Python aussi)
+```
+
+---
+
+### Nettoyage GDS
+
+```cypher
+-- Toujours libérer la projection après usage (mémoire JVM)
+CALL gds.graph.drop('reseau_social');
+```
+
+---
+
+## Récapitulatif des concepts clés
+
+### Modélisation de graphe (Exercice 1)
+
+| Décision | Justification |
+|---|---|
+| `MERGE` au lieu de `CREATE` | Idempotent : on peut relancer le script sans doublons |
+| Contraintes d'unicité | Index automatique + garantie d'intégrité |
+| 3 couches de connexions CONNAIT | Garantit la connexité pour que `shortestPath` fonctionne toujours |
+| Propriétés sur les relations (`note`, `niveau`) | Les relations de graphe peuvent porter des données — avantage sur le relationnel |
+
+### Algorithmes GDS (Exercice 3)
+
+| Algorithme | Usage | Complexité |
+|---|---|---|
+| `shortestPath` (Cypher natif) | Trouver un chemin entre deux nœuds | O(V + E) — BFS |
+| `gds.degree.stream` | Identifier les hubs / influenceurs | O(E) |
+| `gds.louvain.stream` | Détecter des communautés naturelles | O(E · log V) |
+| Recommandation (Cypher custom) | Scoring multi-critères | Dépend des index |
+
+### Formule de recommandation
+
+```
+score = (amis_en_commun × 3) + (cours_en_commun × 2) + (même_filière ? 1 : 0)
+```
+
+Les poids reflètent la force du signal social : un ami en commun est 3× plus prédictif qu'un cours partagé pour une future relation.
