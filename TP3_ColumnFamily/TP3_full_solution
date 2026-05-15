@@ -1,0 +1,413 @@
+# TP3 – SmartGrid DZ : Solutions complètes
+
+---
+
+## Exercice 1 : Schéma Cassandra
+
+### 1.1 – Création du Keyspace
+
+```sql
+-- Pour le TP local (dev/test)
+CREATE KEYSPACE IF NOT EXISTS smartgrid
+WITH replication = {
+  'class': 'NetworkTopologyStrategy',
+  'datacenter1': 1          -- replication_factor = 1 pour local
+}
+AND durable_writes = true;
+
+-- Pour la production (3 nœuds minimum par DC)
+-- CREATE KEYSPACE IF NOT EXISTS smartgrid
+-- WITH replication = {
+--   'class': 'NetworkTopologyStrategy',
+--   'datacenter1': 3
+-- }
+-- AND durable_writes = true;
+
+USE smartgrid;
+```
+
+> **Pourquoi `NetworkTopologyStrategy` ?**  
+> Elle permet de contrôler la réplication par datacenter, ce qui est indispensable en production multi-DC. `SimpleStrategy` est réservée aux environnements de développement à un seul DC.
+
+---
+
+### 1.2 – Table `mesures_par_capteur`
+
+**Requête cible :** `"Mesures du capteur X entre T1 et T2"`
+
+```sql
+CREATE TABLE IF NOT EXISTS mesures_par_capteur (
+  capteur_id   UUID,
+  date_jour    DATE,         -- bucket par jour : évite les partitions infinies
+  timestamp    TIMESTAMP,
+  wilaya       TEXT,
+  commune      TEXT,
+  tension_v    FLOAT,
+  courant_a    FLOAT,
+  puissance_kw FLOAT,
+  frequence_hz FLOAT,
+  temperature  FLOAT,
+  alerte       BOOLEAN,
+  code_alerte  TEXT,
+
+  PRIMARY KEY ((capteur_id, date_jour), timestamp)
+
+) WITH CLUSTERING ORDER BY (timestamp DESC)
+  AND default_time_to_live = 7776000;  -- 90 jours
+```
+
+#### Explication de la PRIMARY KEY
+
+| Composant | Rôle |
+|---|---|
+| `capteur_id` | Identifie le capteur (distribué via UUID) |
+| `date_jour` | **Bucket temporel** – limite la taille de chaque partition à 1 jour de données |
+| `timestamp` | Clé de clustering – permet les requêtes de plage entre T1 et T2 |
+
+#### Pourquoi le bucketing évite-t-il les hot partitions ?
+
+Avec 10 000 capteurs, chaque capteur génère une mesure toutes les minutes → **1 440 mesures/jour/capteur**.  
+Sans `date_jour`, la partition `capteur_id` grossit indéfiniment (Cassandra limite recommandée : ~100 Mo par partition).  
+Avec le bucket journalier, chaque partition est bornée et les données anciennes expirent via TTL.
+
+#### Requêtes supportées
+
+```sql
+-- Toutes les mesures d'un capteur aujourd'hui
+SELECT * FROM mesures_par_capteur
+WHERE capteur_id = ? AND date_jour = ?;
+
+-- Mesures entre T1 et T2 sur une journée
+SELECT * FROM mesures_par_capteur
+WHERE capteur_id = ? AND date_jour = ?
+  AND timestamp >= ? AND timestamp <= ?;
+```
+
+---
+
+### 1.3 – Table `alertes_par_wilaya`
+
+**Requête cible :** `"Alertes de la wilaya X le jour Y"`
+
+```sql
+CREATE TABLE IF NOT EXISTS alertes_par_wilaya (
+  wilaya       TEXT,
+  date_jour    DATE,
+  timestamp    TIMESTAMP,
+  capteur_id   UUID,
+  code_alerte  TEXT,
+  description  TEXT,
+  gravite      INT,      -- 1=info, 2=warning, 3=critique
+  resolue      BOOLEAN,
+
+  PRIMARY KEY ((wilaya, date_jour), timestamp, capteur_id)
+
+) WITH CLUSTERING ORDER BY (timestamp DESC, capteur_id ASC)
+  AND default_time_to_live = 31536000;  -- 1 an
+```
+
+#### Explication de la PRIMARY KEY
+
+| Composant | Rôle |
+|---|---|
+| `wilaya` | Regroupe toutes les alertes d'une wilaya dans la même partition |
+| `date_jour` | Bucket journalier – borne la taille de la partition |
+| `timestamp DESC` | Les alertes les plus récentes en premier |
+| `capteur_id` | Unicité de la clé (deux capteurs peuvent alerter à la même milliseconde) |
+
+#### Requêtes supportées
+
+```sql
+-- Toutes les alertes d'une wilaya pour un jour donné
+SELECT * FROM alertes_par_wilaya
+WHERE wilaya = 'Alger' AND date_jour = '2025-06-15';
+
+-- Alertes critiques uniquement (filtrage côté applicatif ou avec ALLOW FILTERING sur gravite)
+SELECT * FROM alertes_par_wilaya
+WHERE wilaya = 'Alger' AND date_jour = '2025-06-15'
+  AND gravite = 3
+ALLOW FILTERING;  -- acceptable car la partition est déjà ciblée
+```
+
+---
+
+### 1.4 – Table `agregats_horaires`
+
+**Requête cible :** `"Consommation moyenne par heure pour le dashboard wilaya"`
+
+```sql
+CREATE TABLE IF NOT EXISTS agregats_horaires (
+  wilaya            TEXT,
+  date_heure        TIMESTAMP,    -- arrondi à l'heure : 2025-06-15 14:00:00
+  nb_capteurs       INT,
+  puissance_moy_kw  FLOAT,
+  puissance_max_kw  FLOAT,
+  puissance_min_kw  FLOAT,
+  nb_alertes        INT,
+
+  PRIMARY KEY (wilaya, date_heure)
+
+) WITH CLUSTERING ORDER BY (date_heure DESC)
+  AND default_time_to_live = 157680000;  -- 5 ans
+```
+
+#### Explication de la PRIMARY KEY
+
+| Composant | Rôle |
+|---|---|
+| `wilaya` | Partition par wilaya – toutes les heures d'une wilaya ensemble |
+| `date_heure` | Clé de clustering – une ligne par heure, ordonnée DESC |
+
+> **Note :** Contrairement aux mesures brutes, les agrégats sont peu nombreux (24 lignes/jour × 5 wilayas) donc pas besoin de bucketing. La partition est naturellement bornée.
+
+#### Requêtes supportées
+
+```sql
+-- Dashboard : 7 derniers jours pour une wilaya
+SELECT * FROM agregats_horaires
+WHERE wilaya = 'Alger'
+  AND date_heure >= '2025-06-08 00:00:00'
+  AND date_heure <= '2025-06-15 23:00:00';
+
+-- Dernières 24h
+SELECT * FROM agregats_horaires
+WHERE wilaya = 'Oran'
+LIMIT 24;
+```
+
+#### Vérification finale
+
+```sql
+DESCRIBE TABLES;
+-- Doit lister : mesures_par_capteur, alertes_par_wilaya, agregats_horaires
+```
+
+---
+
+## Exercice 2 : Ingestion de données IoT
+
+### Code complet
+
+```python
+"""
+TP3 - Exercice 2 : Ingestion de données IoT
+Use Case : SmartGrid DZ - 10 000 capteurs, 5 minutes de mesures
+"""
+
+from cassandra.cluster import Cluster
+from cassandra.query import BatchStatement, BatchType
+import uuid
+import random
+from datetime import datetime, timedelta
+import time
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+CASSANDRA_HOST = 'localhost'
+KEYSPACE       = 'smartgrid'
+NB_CAPTEURS    = 10000
+MINUTES_HISTORIQUE = 5
+BATCH_SIZE     = 50  # Bonne pratique Cassandra : batches <= 50 items
+
+WILAYAS = ["Alger", "Oran", "Constantine", "Annaba", "Blida"]
+COMMUNES = {
+    "Alger":       ["Bab Ezzouar", "Hydra", "El Harrach", "Dar El Beida"],
+    "Oran":        ["Bir El Djir", "Es Senia", "Arzew"],
+    "Constantine": ["El Khroub", "Ain Smara", "Hamma Bouziane"],
+    "Annaba":      ["El Bouni", "El Hadjar", "Seraidi"],
+    "Blida":       ["Bougara", "Boufarik", "Larbaa"],
+}
+
+# ─── Connexion ────────────────────────────────────────────────────────────────
+def connect():
+    """Connexion au cluster Cassandra."""
+    cluster = Cluster([CASSANDRA_HOST])
+    session = cluster.connect(KEYSPACE)
+    print(f"✅ Connecté à Cassandra ({CASSANDRA_HOST}) – keyspace : {KEYSPACE}")
+    return session, cluster
+
+
+# ─── Génération de mesure ─────────────────────────────────────────────────────
+def generate_mesure(capteur_id: uuid.UUID, wilaya: str, commune: str,
+                    timestamp: datetime) -> dict:
+    """Générer une mesure réaliste pour un capteur électrique algérien."""
+    alerte = random.random() < 0.05  # 5 % de chance d'alerte
+
+    return {
+        "capteur_id": capteur_id,
+        "date_jour":  timestamp.date(),
+        "timestamp":  timestamp,
+        "wilaya":     wilaya,
+        "commune":    commune,
+        "tension_v":  round(220 + random.gauss(0, 5), 2),   # 220V ± variation
+        "courant_a":  round(random.uniform(0.5, 15.0), 2),
+        "puissance_kw": round(random.uniform(0.1, 3.3), 3),
+        "frequence_hz": round(50 + random.gauss(0, 0.1), 2),
+        "temperature":  round(random.uniform(20, 65), 1),
+        "alerte":       alerte,
+        "code_alerte":  random.choice(["SURTENSION", "SOUS_TENSION", "SURCHARGE"])
+                        if alerte else None,
+    }
+
+
+# ─── Insertion simple (prepared statement) ───────────────────────────────────
+def prepare_insert(session) -> object:
+    """Préparer la requête d'insertion (préparée une seule fois, réutilisée)."""
+    return session.prepare("""
+        INSERT INTO mesures_par_capteur
+          (capteur_id, date_jour, timestamp, wilaya, commune,
+           tension_v, courant_a, puissance_kw, frequence_hz,
+           temperature, alerte, code_alerte)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """)
+
+
+def insert_single(session, prepared, mesure: dict) -> None:
+    """
+    Insérer une seule mesure via prepared statement.
+    Utilisé pour les tests ou les insertions unitaires.
+    """
+    session.execute(prepared, (
+        mesure["capteur_id"],
+        mesure["date_jour"],
+        mesure["timestamp"],
+        mesure["wilaya"],
+        mesure["commune"],
+        mesure["tension_v"],
+        mesure["courant_a"],
+        mesure["puissance_kw"],
+        mesure["frequence_hz"],
+        mesure["temperature"],
+        mesure["alerte"],
+        mesure["code_alerte"],
+    ))
+
+
+# ─── Insertion en batch ───────────────────────────────────────────────────────
+def insert_batch(session, prepared, mesures: list) -> None:
+    """
+    Insérer un batch de mesures.
+
+    Règles Cassandra :
+    - UNLOGGED BATCH : pas de garantie atomique, mais performances élevées
+      (adapté aux séries temporelles où l'atomicité n'est pas requise)
+    - Taille max recommandée : 50 items pour éviter la surcharge du coordinateur
+    - Batches multi-partitions → uniquement si nécessaire (ici acceptable car
+      les capteurs du batch partagent souvent la même date_jour)
+    """
+    for i in range(0, len(mesures), BATCH_SIZE):
+        chunk = mesures[i: i + BATCH_SIZE]
+        batch = BatchStatement(batch_type=BatchType.UNLOGGED)
+        for m in chunk:
+            batch.add(prepared, (
+                m["capteur_id"],
+                m["date_jour"],
+                m["timestamp"],
+                m["wilaya"],
+                m["commune"],
+                m["tension_v"],
+                m["courant_a"],
+                m["puissance_kw"],
+                m["frequence_hz"],
+                m["temperature"],
+                m["alerte"],
+                m["code_alerte"],
+            ))
+        session.execute(batch)
+
+
+# ─── Ingestion principale ─────────────────────────────────────────────────────
+def run_ingestion(session) -> None:
+    """
+    Générer et insérer NB_CAPTEURS × MINUTES_HISTORIQUE mesures.
+
+    Stratégie :
+    1. Générer les capteurs (UUID + wilaya/commune fixes par capteur)
+    2. Pour chaque minute des MINUTES_HISTORIQUE dernières minutes,
+       générer les mesures de tous les capteurs et les insérer en batch.
+    3. Afficher les métriques de performance.
+    """
+    print(f"\n🚀 Démarrage ingestion : {NB_CAPTEURS:,} capteurs × {MINUTES_HISTORIQUE} min")
+    print(f"   Taille de batch : {BATCH_SIZE} | Total prévu : {NB_CAPTEURS * MINUTES_HISTORIQUE:,} mesures\n")
+
+    # ── 1. Génération des capteurs ─────────────────────────────────────────────
+    capteurs = []
+    for _ in range(NB_CAPTEURS):
+        wilaya  = random.choice(WILAYAS)
+        commune = random.choice(COMMUNES[wilaya])
+        capteurs.append({
+            "id":      uuid.uuid4(),
+            "wilaya":  wilaya,
+            "commune": commune,
+        })
+
+    # ── 2. Préparer la requête (une seule fois) ────────────────────────────────
+    prepared = prepare_insert(session)
+
+    # ── 3. Ingestion minute par minute ────────────────────────────────────────
+    now   = datetime.utcnow().replace(second=0, microsecond=0)
+    start = time.time()
+
+    for minute_offset in range(MINUTES_HISTORIQUE):
+        ts = now - timedelta(minutes=minute_offset)
+        mesures_du_moment = [
+            generate_mesure(c["id"], c["wilaya"], c["commune"], ts)
+            for c in capteurs
+        ]
+        insert_batch(session, prepared, mesures_du_moment)
+
+        nb_insere = (minute_offset + 1) * NB_CAPTEURS
+        pct = (minute_offset + 1) / MINUTES_HISTORIQUE * 100
+        print(f"  [{pct:5.1f}%] t-{minute_offset}min → {nb_insere:>10,} mesures insérées")
+
+    # ── 4. Rapport de performance ──────────────────────────────────────────────
+    elapsed = time.time() - start
+    total   = NB_CAPTEURS * MINUTES_HISTORIQUE
+
+    print(f"\n✅ {total:,} mesures insérées en {elapsed:.1f}s")
+    print(f"   Débit : {total / elapsed:,.0f} mesures/seconde")
+    print(f"   Moyenne par batch : {BATCH_SIZE} items → {total // BATCH_SIZE:,} batches exécutés")
+
+
+# ─── Point d'entrée ───────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    session, cluster = connect()
+    try:
+        run_ingestion(session)
+    finally:
+        cluster.shutdown()
+        print("\n🔌 Connexion fermée.")
+```
+
+---
+
+## Points clés à retenir
+
+### Modélisation Cassandra (Exercice 1)
+
+| Principe | Application dans le TP |
+|---|---|
+| **Query-first design** | Chaque table répond à une requête précise |
+| **Bucketing temporel** | `date_jour` dans `mesures_par_capteur` pour borner les partitions |
+| **Clé de partition composite** | `(capteur_id, date_jour)` → distribution uniforme des données |
+| **Clustering order** | `timestamp DESC` → dernières mesures en tête |
+| **TTL** | Expiration automatique selon la criticité des données |
+
+### Ingestion IoT (Exercice 2)
+
+| Décision | Justification |
+|---|---|
+| **`UNLOGGED BATCH`** | Meilleure performance pour les séries temporelles (pas besoin d'atomicité) |
+| **Batch size ≤ 50** | Évite la surcharge mémoire du coordinateur Cassandra |
+| **Prepared statement** | Compilée une seule fois par le driver, réutilisée → gains CPU côté serveur |
+| **UUID v4 pour `capteur_id`** | Distribution aléatoire → évite les hot spots sur le ring |
+| **Génération capteurs en mémoire** | Les métadonnées (wilaya/commune) sont stables, pas besoin de les relire à chaque minute |
+
+### Performances attendues
+
+Avec un cluster Cassandra local (1 nœud) :
+
+| Métrique | Valeur typique |
+|---|---|
+| Débit d'écriture | 5 000 – 20 000 mesures/s |
+| Temps total (50 000 mesures) | 3 – 10 secondes |
+| Taille partition/jour/capteur | ~100 Ko (1 440 mesures × ~70 octets) |
